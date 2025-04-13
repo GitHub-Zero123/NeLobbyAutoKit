@@ -1,0 +1,10 @@
+{
+    "cookie": "账号cookie",         // 可在开发者平台f12调试模式->网络 随便点击一个mod查看可以捕获到me字头的请求 其中包含你的账号cookie
+    "modId": "模组ID",              // MOD_ID / 联机大厅项目ID
+    "targetPath": "D:/xxx/xxxx",    // 项目路径
+    // 打包忽略文件
+    "ignore": [
+        "*.exe",
+        "TARGET_CONFIG.json"
+    ]
+}
