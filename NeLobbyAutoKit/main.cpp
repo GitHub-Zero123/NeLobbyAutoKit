@@ -73,13 +73,12 @@ public:
             {
                 continue;
             }
-
             auto relPath = fs::relative(entry.path(), inputAbs).generic_string();
             if (shouldIgnore(relPath, ignorePatterns))
             {
+                std::cout << "忽略：" << relPath << "\n";
                 continue;
             }
-
             if (!mz_zip_writer_add_file(&zip, relPath.c_str(), entry.path().string().c_str(),
                 nullptr, 0, MZ_BEST_SPEED))
             {
