@@ -33,7 +33,7 @@ public:
     bool zipSuccess = false;
 
     std::vector<uint8_t> compressToMemory(const std::filesystem::path& inputDir,
-        const std::vector<std::string>& ignoreGlobs)
+        const std::vector<std::string>& ignoreGlobs, bool ignoreLog=true)
     {
         namespace fs = std::filesystem;
         zipSuccess = true;
@@ -73,13 +73,16 @@ public:
             {
                 continue;
             }
-            auto relPath = fs::relative(entry.path(), inputAbs).generic_string();
+            auto relPath = fs::relative(entry.path(), inputAbs);
             if (shouldIgnore(relPath, ignorePatterns))
             {
-                std::cout << "忽略：" << relPath << "\n";
+                if (ignoreLog)
+                {
+                    std::cout << "忽略：" << relPath << "\n";
+                }
                 continue;
             }
-            if (!mz_zip_writer_add_file(&zip, relPath.c_str(), entry.path().string().c_str(),
+            if (!mz_zip_writer_add_file(&zip, relPath.string().c_str(), entry.path().string().c_str(),
                 nullptr, 0, MZ_BEST_SPEED))
             {
                 std::cerr << "文件添加异常: " << relPath << "\n";
@@ -129,11 +132,13 @@ private:
         return std::regex("^" + regexStr + "$");
     }
 
-    bool shouldIgnore(const std::string& path, const std::vector<std::regex>& patterns)
+    bool shouldIgnore(const std::filesystem::path& path, const std::vector<std::regex>& patterns)
     {
+        auto formatPath = path.generic_string();
+        // auto fileName = path.filename().string();
         for (const auto& regex : patterns)
         {
-            if (std::regex_match(path, regex)) return true;
+            if (std::regex_match(formatPath, regex)) return true;
         }
         return false;
     }
@@ -164,6 +169,8 @@ int main(int argc, const char** argv)
         std::string cookie = config.at("cookie");
         std::string modId = config.at("modId");
         std::string targetPath = config.at("targetPath");
+        bool ignoreLog = config.value("ignoreLog", true);
+        std::string outZipPath = config.value("outZipPath", "");
         std::vector<std::string> ignore;
         if (config.contains("ignore"))
         {
@@ -183,11 +190,27 @@ int main(int argc, const char** argv)
         }
         std::cout << "ZIP打包中: " << targetPath << "\n";
         MemoryZipCompressor zip;
-        auto zipBytes = zip.compressToMemory(targetPath, ignore);
+        auto zipBytes = zip.compressToMemory(targetPath, ignore, ignoreLog);
         if (!zip.zipSuccess)
         {
             showToast(L"压缩错误", L"文件打包期间出现错误, 已终止工作");
             return 0;
+        }
+		else
+		{
+			std::cout << "ZIP文件已打包到内存\n";
+            // 写出ZIP文件
+            if (!outZipPath.empty())
+            {
+                std::ofstream outFile(outZipPath, std::ios::binary);
+                if (!outFile)
+                {
+                    throw std::runtime_error("无法创建输出文件: " + outZipPath);
+                }
+                outFile.write(reinterpret_cast<const char*>(zipBytes.data()), zipBytes.size());
+                outFile.close();
+                std::cout << "ZIP文件已保存到: " << outZipPath << "\n";
+            }
         }
         NeAutoKit::NeteaseUser user{ cookie };
         std::cout << "正在获取MOD信息..\n";
@@ -210,10 +233,26 @@ int main(int argc, const char** argv)
             throw std::runtime_error("MOD自测提交失败");
         }
         std::cout << "自测提交成功 进入消息循环检查状态\n";
+        unsigned int queryCount = 0;
+        NeAutoKit::ModINFO nowModData;
         while (1)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-            auto nowModData = user.getModifyModData(modId);
+            try
+            {
+                nowModData = std::move(user.getModifyModData(modId));
+            }
+            catch (const std::exception& e)
+            {
+                if (queryCount >= 10)
+                {
+                    // 至多10次重试
+                    throw e;
+                }
+                queryCount++;
+				std::cout << "获取MOD信息失败，等待重试\n";
+                continue;
+            }
             auto state = nowModData.getState();
             if (state == "init")
             {
