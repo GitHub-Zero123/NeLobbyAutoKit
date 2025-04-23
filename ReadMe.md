@@ -34,4 +34,4 @@ TARGET_CONFIG.json 用于声明目标参数
 联机大厅的压缩文件需要额外套一个`顶级文件夹`，因此targetPath需要注意。
 
 ## 注意
-自动化打包压缩可能会忽略空文件夹 请确保entities/textures不为空(如新建一个__init__.py)在里面
+自动化打包压缩可能会忽略空文件夹 请确保entities/textures不为空(如新建一个`__init__.py`在文件夹内)
